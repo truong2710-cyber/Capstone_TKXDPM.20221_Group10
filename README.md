@@ -1,4 +1,4 @@
-# Capstone_TKXDPM.20221_Group10
+# Capstone_TKXDPM.20221_Group10: Ecobike Rental System
 Member: 
 - Vũ Quang Trường
 - Nguyễn Phúc Tân
