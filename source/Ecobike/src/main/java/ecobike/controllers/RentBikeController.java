@@ -5,16 +5,17 @@ import ecobike.database_services.CardDatabaseService;
 import ecobike.database_services.EventDatabaseService;
 import ecobike.database_services.PaymentTransactionDatabaseService;
 import ecobike.database_services.RentalDatabaseService;
-import ecobike.entities.Card;
-import ecobike.entities.ParkingLot;
+import ecobike.entities.*;
 import ecobike.subsystems.barcode_subsystem.BarcodeConverterController;
 import ecobike.subsystems.interbank_subsystem.IInterbank;
 import ecobike.subsystems.interbank_subsystem.InterbankController;
+import ecobike.validators.BarcodeValidator;
 import ecobike.views.box.ErrorBox;
 import ecobike.views.Main;
 import ecobike.views.box.ConfirmBox;
 
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
@@ -45,17 +46,16 @@ public class RentBikeController {
         boolean RentConfirmation = false;
         if (barcode.isEmpty()) {
             ErrorBox.show("Error", "Bạn chưa nhập barcode!");
-            //NotificationBox.display("NotificationBox", "Vui lòng nhập barcode!");
+        } else if (!BarcodeValidator.validateBarcode(barcode)) {
+            ErrorBox.show("Error", "Barcode không hợp lệ!");
         } else {
             int bikecode = barcodeConverterController.convertBarcodeToBikeCode(barcode);
             bikeID = String.valueOf(bikecode);
             ArrayList<ArrayList<String>> bikes = BikeDatabaseService.getAllBikesByID(bikeID);
             if (bikes.isEmpty()) {
                 ErrorBox.show("Error", "Xe này không tồn tại!");
-                //NotificationBox.display("NotificationBox", "Xe này không tồn tại!");
             } else if (bikes.get(0).get(12).equals("1")) {
                 ErrorBox.show("Error", "Xe này đang được thuê rồi!");
-                //NotificationBox.display("NotificationBox", "Xe này đang được thuê rồi!");
             } else {
                 if (bikes.get(0).get(11).equals(parkingLot.getID())) {
                     RentConfirmation = ConfirmBox.show("ConfirmBox", "Bạn có chắc chắn muốn thê xe có mã " + barcode + " không ạ?");
@@ -97,22 +97,24 @@ public class RentBikeController {
         return cardCurrentlyOnRental;
     }
 
-    public String handlePayment(String cardCode, String owner, String cvv, String amount, String expiredDate) {
+    public String handlePayment(Card card, String amount) {
         try {
-            SimpleDateFormat fromUser = new SimpleDateFormat(INPUT_DATE_FORMAT);
-            SimpleDateFormat myFormat = new SimpleDateFormat(OUTPUT_DATE_FORMAT);
-            expiredDate = myFormat.format(fromUser.parse(expiredDate));
+//            SimpleDateFormat fromUser = new SimpleDateFormat(INPUT_DATE_FORMAT);
+//            SimpleDateFormat myFormat = new SimpleDateFormat(OUTPUT_DATE_FORMAT);
+//            String expiredDate = String.valueOf(card.getExpiredDate());
 
             IInterbank interbank = new InterbankController();
-            Card card = new Card(cardCode, owner, cvv, expiredDate);
-            String respondCode = interbank.processTransaction(card, Integer.parseInt(amount), "deposit", "Refund transaction");
+            InterbankTransaction interbankTransaction = new InterbankTransaction(card, "deposit", "Deposit transaction", Integer.parseInt(amount), LocalDateTime.now());
+            String respondCode = interbank.processTransaction(interbankTransaction);
 
             if (respondCode.equals("00")) {
-                CardDatabaseService.saveCardInfo(cardCode, owner, cvv, expiredDate);
-                RentalDatabaseService.saveRental(Integer.toString(Main.user_id), bikeID, cardCode);
+                CardDatabaseService.saveCardInfo(card.getCardCode(), card.getOwner(), card.getCVV(), String.valueOf(card.getExpiredDate()));
+                RentalDatabaseService.saveRental(Integer.toString(Main.user_id), bikeID, card.getCardCode());
                 String rentalID = RentalDatabaseService.getLastestRentalID();
-                EventDatabaseService.saveEvent(rentalID, "start");
-                PaymentTransactionDatabaseService.savePaymentTransaction(rentalID, Integer.parseInt(amount), "deposit");
+                Rental rental = new Rental(rentalID, bikeID, card.getCardCode());
+                Event event = new Event(rentalID, LocalDateTime.now(), "start");
+                EventDatabaseService.saveEvent(event.getRentalId(), event.getType());
+                PaymentTransactionDatabaseService.savePaymentTransaction(event.getRentalId(), (long) interbankTransaction.getAmount(), interbankTransaction.getCommand());
                 BikeDatabaseService.updateBikeRentalStatus(bikeID, "1");
             }
             return respondCode;

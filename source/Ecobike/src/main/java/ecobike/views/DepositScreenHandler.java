@@ -2,11 +2,14 @@ package ecobike.views;
 
 import ecobike.controllers.RentBikeController;
 import ecobike.controllers.ViewBikeController;
+import ecobike.entities.Card;
+import ecobike.validators.CardInfoValidator;
 import ecobike.views.box.ErrorBox;
 import ecobike.views.box.TransactionInfoNotiBox;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 
@@ -15,7 +18,10 @@ import java.util.ResourceBundle;
 
 public class DepositScreenHandler implements Initializable {
     @FXML
-    private TextField text1, text2, text3, text4, text5;
+    private TextField text1, text2, text3, text4;
+
+    @FXML
+    private DatePicker datePicker;
 
     String bikeID;
 
@@ -50,7 +56,13 @@ public class DepositScreenHandler implements Initializable {
             //NotificationBox.display("Error", "Thẻ đang được sử dụng trong giao dịch thuê khác!");
             return;
         }
-        String respondCode = rentBikeController.handlePayment(text1.getText(), text2.getText(), text3.getText(), text4.getText(), text5.getText());
+        if (!(CardInfoValidator.validateCardCode(text1.getText()) && CardInfoValidator.validateOwner(text2.getText()) && CardInfoValidator.validateCvv(text3.getText()) && CardInfoValidator.validateExpireDate(datePicker.getValue()))){
+            ErrorBox.show("Error", "Thông tin thẻ không hợp lệ!");
+            return;
+        }
+        Card card = new Card(text1.getText(), text2.getText(), text3.getText(), datePicker.getValue());
+        String amount = text4.getText();
+        String respondCode = rentBikeController.handlePayment(card, amount);
         TransactionInfoNotiBox.displayNotificationErrorCode(respondCode, "deposit");
 
     }
